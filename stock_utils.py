@@ -78,3 +78,4 @@ def is_market_open():
     open_time = time(13, 30)
     close_time = time(20, 0)
     return now.weekday() < 5 and open_time <= now.time() <= close_time
+
