@@ -1,25 +1,28 @@
-import os
-import requests
-import gspread
-from dotenv import load_dotenv
-from datetime import datetime, time
-from oauth2client.service_account import ServiceAccountCredentials
+impo
+                results.append(f"{symbol} up-to-date")
+                logging.info(f"{symbol} for {data['date']} is already up-to-date")
+        except Exception as e:
+            error_msg = f"Error updating {symbol}: {e}"
+            logging.error(error_msg)
+            results.append(error_msg)
+    return results
 
-load_dotenv()
+def get_latest_data():
+    try:
+        rows = sheet.get_all_records()
+        logging.info(f"Retrieved {len(rows)} rows from sheet.")
+        return rows
+    except Exception as e:
+        logging.error(f"Error retrieving data from sheet: {e}")
+        return []
 
-ALPHA_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
-STOCK_SYMBOLS = os.getenv("STOCK_SYMBOLS", "AAPL,MSFT,GOOGL").split(",")
-GOOGLE_SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME", "Stock Data")
-
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-client = gspread.authorize(creds)
-sheet = client.open(GOOGLE_SHEET_NAME).sheet1
-
-def ensure_headers():
-    expected = ["Date", "Symbol", "Open", "Close", "High", "Low", "Volume"]
-    headers = sheet.row_values(1)
-    if headers != expected:
+def is_market_open():
+    now = datetime.utcnow()
+    open_time = time(13, 30)
+    close_time = time(20, 0)
+    is_open = now.weekday() < 5 and open_time <= now.time() <= close_time
+    logging.info(f"Market open: {is_open}")
+    return is_open
         sheet.insert_row(expected, 1)
 
 def fetch_stock_data(symbol):
@@ -78,4 +81,5 @@ def is_market_open():
     open_time = time(13, 30)
     close_time = time(20, 0)
     return now.weekday() < 5 and open_time <= now.time() <= close_time
+
 
