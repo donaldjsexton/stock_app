@@ -32,28 +32,28 @@ def ensure_headers():
         sheet.insert_row(expected, 1)
 
 def fetch_stock_data(symbol):
-    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval=5min&apikey={ALPHA_API_KEY}&outputsize=compact"
+    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={ALPHA_API_KEY}"
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
-        series = data.get("Time Series (5min)")
-        if not series:
-            raise ValueError(f"No intraday data for {symbol}: {data.get('Note') or data}")
-        latest_time = max(series.keys())
-        values = series[latest_time]
-        logging.info(f"Fetched intraday data for {symbol} at {latest_time}")
+        time_series = data.get("Time Series (Daily)")
+        if not time_series:
+            raise ValueError(f"No time series data: {data.get('Note') or data}")
+        latest_date = max(time_series.keys())
+        daily_data = time_series[latest_date]
+        logging.info(f"Fetched data for {symbol} on {latest_date}")
         return {
-            "date": latest_time.split()[0],  # keep just date for sheet
+            "date": latest_date,
             "symbol": symbol,
-            "open": values["1. open"],
-            "close": values["4. close"],
-            "high": values["2. high"],
-            "low": values["3. low"],
-            "volume": values["5. volume"]
+            "open": daily_data["1. open"],
+            "close": daily_data["4. close"],
+            "high": daily_data["2. high"],
+            "low": daily_data["3. low"],
+            "volume": daily_data["5. volume"]
         }
     except Exception as e:
-        logging.error(f"Failed intraday fetch for {symbol}: {e}")
+        logging.error(f"Failed to fetch data for {symbol}: {e}")
         raise
 
 def row_needs_update(date, symbol, new_data):
