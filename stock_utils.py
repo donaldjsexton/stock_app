@@ -32,29 +32,30 @@ def ensure_headers():
         sheet.insert_row(expected, 1)
 
 def fetch_stock_data(symbol):
-    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={ALPHA_API_KEY}"
+    url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval=5min&apikey={ALPHA_API_KEY}&outputsize=compact"
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
-        time_series = data.get("Time Series (Daily)")
-        if not time_series:
-            raise ValueError(f"No time series data: {data.get('Note') or data}")
-        latest_date = max(time_series.keys())
-        daily_data = time_series[latest_date]
-        logging.info(f"Fetched data for {symbol} on {latest_date}")
+        series = data.get("Time Series (5min)")
+        if not series:
+            raise ValueError(f"No intraday data for {symbol}: {data.get('Note') or data}")
+        latest_time = max(series.keys())  # e.g., '2025-04-04 15:35:00'
+        values = series[latest_time]
+        logging.info(f"Fetched intraday data for {symbol} at {latest_time}")
         return {
-            "date": latest_date,
+            "date": latest_time.split()[0],  # keep only date
             "symbol": symbol,
-            "open": daily_data["1. open"],
-            "close": daily_data["4. close"],
-            "high": daily_data["2. high"],
-            "low": daily_data["3. low"],
-            "volume": daily_data["5. volume"]
+            "open": values["1. open"],
+            "close": values["4. close"],
+            "high": values["2. high"],
+            "low": values["3. low"],
+            "volume": values["5. volume"]
         }
     except Exception as e:
-        logging.error(f"Failed to fetch data for {symbol}: {e}")
+        logging.error(f"Failed intraday fetch for {symbol}: {e}")
         raise
+
 
 def row_needs_update(date, symbol, new_data):
     all_records = sheet.get_all_records()
@@ -72,33 +73,32 @@ def row_needs_update(date, symbol, new_data):
 def update_stocks():
     ensure_headers()
     results = []
+    all_records = sheet.get_all_records()
+    row_lookup = {
+        (row["Date"].strip(), row["Symbol"].strip()): i + 2
+        for i, row in enumerate(all_records)
+    }
+
     for symbol in STOCK_SYMBOLS:
         try:
             data = fetch_stock_data(symbol)
-            row_number, needs_update = row_needs_update(data["date"], data["symbol"], data)
-            if row_number is None:
-                sheet.append_row([
-                    data["date"], data["symbol"],
-                    data["open"], data["close"],
-                    data["high"], data["low"], data["volume"]
-                ])
-                results.append(f"Added {symbol}")
-                logging.info(f"Added {symbol} for {data['date']}")
-            elif needs_update:
-                sheet.update(f"A{row_number}:G{row_number}", [[
-                    data["date"], data["symbol"],
-                    data["open"], data["close"],
-                    data["high"], data["low"], data["volume"]
-                ]])
-                results.append(f"Updated {symbol}")
-                logging.info(f"Updated {symbol} for {data['date']}")
+            row_values = [
+                data["date"], data["symbol"],
+                data["open"], data["close"],
+                data["high"], data["low"], data["volume"]
+            ]
+            key = (data["date"], data["symbol"])
+            if key in row_lookup:
+                sheet.update(f"A{row_lookup[key]}:G{row_lookup[key]}", [row_values])
+                logging.info(f"Overwrote row {row_lookup[key]} for {symbol}")
+                results.append(f"Overwrote {symbol}")
             else:
-                results.append(f"{symbol} up-to-date")
-                logging.info(f"{symbol} for {data['date']} is already up-to-date")
+                sheet.append_row(row_values)
+                logging.info(f"Appended new row for {symbol}")
+                results.append(f"Added {symbol}")
         except Exception as e:
-            error_msg = f"Error updating {symbol}: {e}"
-            logging.error(error_msg)
-            results.append(error_msg)
+            logging.error(f"Error updating {symbol}: {e}")
+            results.append(f"Error with {symbol}: {e}")
     return results
 
 def get_latest_data():
